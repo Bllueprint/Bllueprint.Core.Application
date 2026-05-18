@@ -1,6 +1,5 @@
 using Bllueprint.Core.Domain;
 using FluentAssertions;
-using MediatR;
 
 namespace Bllueprint.Core.Application.Tests;
 
