@@ -1,5 +1,6 @@
 using Bllueprint.Core.Domain;
 using FluentAssertions;
+using MediatR;
 
 namespace Bllueprint.Core.Application.Tests;
 
@@ -124,21 +125,52 @@ public class PipelineTests
     }
 
     [Fact]
-    public async Task HandlerPipeline_Save_PersistsAndReturnsEntity()
+    public async Task HandlerPipeline_InvokeEntityTask_ExecutesSideEffectAndContinues()
     {
         (HandlerPipeline<string>? pipeline, PipelineContext _) = PipelineFixture.StartPipeline(() => Task.FromResult<string?>("data"));
-        bool saved = false;
+        bool sideEffectRan = false;
 
         ICommandResult<string> result = await pipeline
-            .Save(_ =>
+            .Invoke(s =>
             {
-                saved = true;
+                sideEffectRan = true;
                 return Task.CompletedTask;
             }).ToResultAsync();
 
-        saved.Should().BeTrue();
+        sideEffectRan.Should().BeTrue();
         result.Entity.Should().Be("data");
         result.HasErrors.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task HandlerPipeline_InvokeEntityTask_Throws_RecordsError()
+    {
+        (HandlerPipeline<string>? pipeline, PipelineContext _) = PipelineFixture.StartPipeline(() => Task.FromResult<string?>("data"));
+
+        ICommandResult<string> result = await pipeline
+            .Invoke(_ => Task.FromException(new Exception("side effect failed")))
+            .ToResultAsync();
+
+        result.HasErrors.Should().BeTrue();
+        result.Errors.Should().ContainSingle(e => e.Message == "side effect failed");
+    }
+
+    [Fact]
+    public async Task HandlerPipeline_InvokeEntityTask_SkippedAfterFailure()
+    {
+        (HandlerPipeline<string>? pipeline, PipelineContext _) = PipelineFixture.StartPipeline(() => Task.FromResult<string?>("data"));
+        bool sideEffectRan = false;
+
+        ICommandResult<string> result = await pipeline
+            .Invoke(_ => Task.FromException(new Exception("first fail")))
+            .Invoke(_ =>
+            {
+                sideEffectRan = true;
+                return Task.CompletedTask;
+            }).ToResultAsync();
+
+        sideEffectRan.Should().BeFalse();
+        result.HasErrors.Should().BeTrue();
     }
 
     [Fact]
@@ -163,19 +195,6 @@ public class PipelineTests
 
         result.HasErrors.Should().BeTrue();
         result.Errors.Should().ContainSingle(e => e.Message == "boom");
-    }
-
-    [Fact]
-    public async Task HandlerPipeline_SaveThrows_RecordsError()
-    {
-        (HandlerPipeline<string>? pipeline, PipelineContext _) = PipelineFixture.StartPipeline(() => Task.FromResult<string?>("entity"));
-
-        ICommandResult<string> result = await pipeline
-            .Save(_ => Task.FromException(new Exception("save failed")))
-            .ToResultAsync();
-
-        result.HasErrors.Should().BeTrue();
-        result.Errors.Should().ContainSingle(e => e.Message == "save failed");
     }
 
     [Fact]
@@ -268,20 +287,20 @@ public class PipelineTests
     }
 
     [Fact]
-    public async Task WithCheck_SaveInvoke_PredicateFalse_DoesNotSave()
+    public async Task WithCheck_InvokeEntityTask_PredicateFalse_DoesNotExecute()
     {
         (HandlerPipeline<string>? pipeline, PipelineContext _) = PipelineFixture.StartPipeline(() => Task.FromResult<string?>("entity"));
-        int savedCount = 0;
+        int callCount = 0;
 
         ICommandResult<string> result = await pipeline
             .WithCheck(s => false)
-            .Save(_ =>
+            .Invoke(_ =>
             {
-                savedCount++;
+                callCount++;
                 return Task.CompletedTask;
             }).ToResultAsync();
 
-        savedCount.Should().Be(0);
+        callCount.Should().Be(0);
         result.HasErrors.Should().BeTrue();
     }
 
@@ -429,6 +448,64 @@ public class PipelineTests
 
         entityRan.Should().BeFalse();
         result.HasErrors.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ExceptionGuardPipeline_ToResultAsync_GuardSucceeds_Completes()
+    {
+        PipelineContext ctx = PipelineFixture.NewContext();
+        bool guardRan = false;
+
+        var guardPipeline = new ExceptionGuardPipeline(
+            () =>
+            {
+                guardRan = true;
+                return Task.CompletedTask;
+            },
+            [],
+            ctx);
+
+        await guardPipeline.ToResultAsync();
+
+        guardRan.Should().BeTrue();
+        ctx.Failed.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ExceptionGuardPipeline_ToResultAsync_GuardThrows_RecordsError()
+    {
+        PipelineContext ctx = PipelineFixture.NewContext();
+
+        var guardPipeline = new ExceptionGuardPipeline(
+            () => Task.FromException(new Exception("commit failed")),
+            [],
+            ctx);
+
+        await guardPipeline.ToResultAsync();
+
+        ctx.Failed.Should().BeTrue();
+        ctx.Notifications.ValidationErrors.Should().ContainSingle(e => e.Message == "An unexpected error occurred.");
+    }
+
+    [Fact]
+    public async Task ExceptionGuardPipeline_ToResultAsync_AlreadyFailed_SkipsGuard()
+    {
+        PipelineContext ctx = PipelineFixture.NewContext();
+        ctx.Fail("Pre-existing failure");
+        bool guardRan = false;
+
+        var guardPipeline = new ExceptionGuardPipeline(
+            () =>
+            {
+                guardRan = true;
+                return Task.CompletedTask;
+            },
+            [],
+            ctx);
+
+        await guardPipeline.ToResultAsync();
+
+        guardRan.Should().BeFalse();
     }
 
     [Fact]

@@ -138,7 +138,7 @@ internal sealed class WithPipeline<T>(
         return new HandlerPipeline<T>(steps, ctx);
     }
 
-    public IHandlerPipeline<T> Save(Func<T, Task> persist)
+    public IHandlerPipeline<T> Invoke(Func<T, Task> entityTask)
     {
         string message = _message;
 
@@ -161,8 +161,17 @@ internal sealed class WithPipeline<T>(
                 return default;
             }
 
-            await persist(entity);
-            return entity;
+            try
+            {
+                await entityTask(entity);
+            }
+            catch
+            {
+                ctx.Fail("An unexpected error occurred.");
+                return default;
+            }
+
+            return (object?)entity;
         });
 
         return new HandlerPipeline<T>(steps, ctx);

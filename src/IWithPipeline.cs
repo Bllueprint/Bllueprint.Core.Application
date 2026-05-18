@@ -12,7 +12,7 @@ public interface IWithPipeline<T>
 
     IHandlerPipeline<T> Invoke(Func<Task> guardTask);
 
-    IHandlerPipeline<T> Save(Func<T, Task> persist);
+    IHandlerPipeline<T> Invoke(Func<T, Task> entityTask);
 
     Task<ICommandResult<T>> ToResultAsync();
 }
