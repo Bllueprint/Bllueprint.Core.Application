@@ -130,7 +130,7 @@ internal sealed class HandlerPipeline<T>(
         return this;
     }
 
-    public IHandlerPipeline<T> Save(Func<T, Task> persist, [CallerMemberName] string stepName = "")
+    public IHandlerPipeline<T> Invoke(Func<T, Task> entityTask, [CallerMemberName] string stepName = "")
     {
         steps.Add(async input =>
         {
@@ -147,7 +147,7 @@ internal sealed class HandlerPipeline<T>(
 
             try
             {
-                await persist(entity);
+                await entityTask(entity);
             }
             catch (Exception ex)
             {

@@ -41,4 +41,21 @@ internal sealed class ExceptionGuardPipeline(
 
         return new HandlerPipeline<TNext>(steps, ctx);
     }
+
+    public async Task ToResultAsync()
+    {
+        if (ctx.Failed)
+        {
+            return;
+        }
+
+        try
+        {
+            await guardTask();
+        }
+        catch
+        {
+            ctx.Fail(_message);
+        }
+    }
 }

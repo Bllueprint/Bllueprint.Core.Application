@@ -12,9 +12,9 @@ public interface IHandlerPipeline<T>
 
     IHandlerPipeline<T> Invoke(Action<T> transition);
 
-    public IHandlerPipeline<T> Invoke(Func<Task> guardTask, [CallerMemberName] string stepName = "");
+    IHandlerPipeline<T> Invoke(Func<Task> guardTask, [CallerMemberName] string stepName = "");
 
-    IHandlerPipeline<T> Save(Func<T, Task> persist, [CallerMemberName] string stepName = "");
+    IHandlerPipeline<T> Invoke(Func<T, Task> entityTask, [CallerMemberName] string stepName = "");
 
     Task<ICommandResult<T>> ToResultAsync();
 }
