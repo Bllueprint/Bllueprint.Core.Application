@@ -5,11 +5,11 @@ namespace Bllueprint.Core.Application;
 public interface IRepository<TEntity>
 where TEntity : class, IAggregate
 {
-    Task AddAsync(TEntity entity);
+    Task<TEntity> AddAsync(TEntity entity);
 
-    Task DeleteAsync(TEntity entity);
+    Task<bool> DeleteAsync(TEntity entity);
 
     Task<TEntity?> GetByIdAsync(Guid id);
 
-    Task UpdateAsync(TEntity entity);
+    Task<TEntity> UpdateAsync(TEntity entity);
 }
